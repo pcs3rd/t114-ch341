@@ -19,6 +19,7 @@
 #include "device/usbd_pvt.h"
 #include "ch341_emu.h"
 #include "t114_hw.h"
+#include "status.h"
 
 #define CMD_SPI_STREAM   0xA8
 #define CMD_UIO_STREAM   0xAB
@@ -74,6 +75,7 @@ static void execute(pkt_t const *in, pkt_t *out) {
       uint8_t n = in->len - 1;
       if (n) {
         hw_spi_xfer(&in->data[1], out->data, n);
+        status_spi(&in->data[1], out->data, n, hw_millis());
         out->len = n;
         activity = true;
       }
@@ -87,9 +89,11 @@ static void execute(pkt_t const *in, pkt_t *out) {
         if (top == UIO_STM_OUT) {
           d_state = b & 0x3F;
           hw_apply_pins(d_state, d_dir);
+          status_cs((d_dir & 1) && !(d_state & 1));
         } else if (top == UIO_STM_DIR) {
           d_dir = b & 0x3F;
           hw_apply_pins(d_state, d_dir);
+          status_cs((d_dir & 1) && !(d_state & 1));
         } else if (top == UIO_STM_US) {
           hw_delay_us(b & 0x3F);
         } else if (b & UIO_STM_END) { // 0x20..0x3F
@@ -175,6 +179,7 @@ static bool drv_xfer_cb(uint8_t rhport, uint8_t ep_addr, xfer_result_t result, u
       p->len = (uint8_t)TU_MIN(xferred_bytes, CH341_PACKET_LEN);
       memcpy(p->data, ep_out_buf, p->len);
       rx_ring.head++;
+      status_host_packet(hw_millis());
     }
     arm_out();
   } else if (ep_addr == CH341_EP_IN) {
@@ -216,6 +221,17 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
     return true;
   }
 
+  // Our own request: LED brightness. OUT sets it from wValue (0-255, 0 = off); IN reads it back.
+  if (req->bRequest == CH341_EMU_REQ_BRIGHTNESS) {
+    if (stage != CONTROL_STAGE_SETUP) return true;
+    if (req->bmRequestType_bit.direction == TUSB_DIR_OUT) {
+      status_set_brightness((uint8_t)TU_MIN(req->wValue, 255));
+      return tud_control_status(rhport, req);
+    }
+    ctrl_buf[0] = status_get_brightness();
+    return tud_control_xfer(rhport, req, ctrl_buf, TU_MIN(req->wLength, 1));
+  }
+
   // Anything else a CH341 driver might send (0x5F version query, 0xA1 init, ...): answer politely
   if (stage != CONTROL_STAGE_SETUP) return true;
   uint16_t n = TU_MIN(req->wLength, sizeof(ctrl_buf));
@@ -235,6 +251,7 @@ void ch341_emu_init(void) {
   d_state = 0;
   d_dir = 0;
   hw_init();
+  status_init();
 }
 
 void ch341_emu_task(void) {
@@ -248,8 +265,10 @@ void ch341_emu_task(void) {
   arm_out();
   kick_in();
 
-  // LED: on while configured, blinks off briefly on SPI traffic
   uint32_t now = hw_millis();
+  status_task(now, tud_mounted());
+
+  // Green LED: on while configured, blinks off briefly on SPI traffic
   if (activity) {
     activity = false;
     hw_led(false);

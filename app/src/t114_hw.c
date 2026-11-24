@@ -7,6 +7,16 @@
 #include "ch341_emu.h"
 #include "t114_hw.h"
 
+// --- T114 board power / peripherals (Meshtastic heltec_mesh_node_t114 variant) ---
+#define T114_VEXT_EN     21  // P0.21, high = Vext on (NeoPixels, TFT, GPS)
+#define T114_VTFT_CTRL    3  // P0.3, low = TFT powered
+#define T114_VTFT_LEDA   15  // P0.15, low = TFT backlight on
+#define T114_NEOPIXEL    14  // P0.14, 2x WS2812, GRB
+
+#ifndef T114_NEOPIXEL_VEXT
+#define T114_NEOPIXEL_VEXT 1 // switch Vext on so the NeoPixels have power
+#endif
+
 static uint8_t spi_tx[CH341_PACKET_LEN] __attribute__((aligned(4)));
 static uint8_t spi_rx[CH341_PACKET_LEN] __attribute__((aligned(4)));
 
@@ -40,6 +50,68 @@ void hw_init(void) {
   NRF_SPIM2->ENABLE = SPIM_ENABLE_ENABLE_Enabled;
 
   hw_apply_pins(0, 0);
+
+  // Keep the TFT and its backlight dark; we never drive the display.
+  nrf_gpio_pin_set(T114_VTFT_CTRL);
+  nrf_gpio_cfg_output(T114_VTFT_CTRL);
+  nrf_gpio_pin_set(T114_VTFT_LEDA);
+  nrf_gpio_cfg_output(T114_VTFT_LEDA);
+#if T114_NEOPIXEL_VEXT
+  nrf_gpio_pin_set(T114_VEXT_EN);
+  nrf_gpio_cfg_output(T114_VEXT_EN);
+#endif
+
+  // WS2812 on PWM0: 16 MHz, 20 ticks = 1.25 us per bit. Bit 15 set makes each value the
+  // high time at the start of the period; 0x8000 alone is a low period.
+  nrf_gpio_pin_clear(T114_NEOPIXEL);
+  nrf_gpio_cfg_output(T114_NEOPIXEL);
+  NRF_PWM0->PSEL.OUT[0] = T114_NEOPIXEL;
+  NRF_PWM0->PSEL.OUT[1] = 0xFFFFFFFFul;
+  NRF_PWM0->PSEL.OUT[2] = 0xFFFFFFFFul;
+  NRF_PWM0->PSEL.OUT[3] = 0xFFFFFFFFul;
+  NRF_PWM0->MODE = PWM_MODE_UPDOWN_Up;
+  NRF_PWM0->PRESCALER = PWM_PRESCALER_PRESCALER_DIV_1;
+  NRF_PWM0->COUNTERTOP = 20;
+  NRF_PWM0->LOOP = 0;
+  NRF_PWM0->DECODER = (PWM_DECODER_LOAD_Common << PWM_DECODER_LOAD_Pos) |
+                      (PWM_DECODER_MODE_RefreshCount << PWM_DECODER_MODE_Pos);
+  NRF_PWM0->SEQ[0].REFRESH = 0;
+  NRF_PWM0->SEQ[0].ENDDELAY = 0;
+  NRF_PWM0->ENABLE = PWM_ENABLE_ENABLE_Enabled;
+}
+
+#define WS_T0H   (6u | 0x8000u)   // 0.375 us high
+#define WS_T1H   (13u | 0x8000u)  // 0.8125 us high
+#define WS_LOW   (0x8000u)
+#define WS_BITS  (2 * 24)
+#define WS_TAIL  2                // end low so the line idles low (latch comes from the gap between frames)
+
+static uint16_t ws_seq[WS_BITS + WS_TAIL] __attribute__((aligned(4)));
+static bool ws_running;
+
+bool hw_pixels_write(uint8_t const rgb[6]) {
+  if (ws_running) {
+    if (!NRF_PWM0->EVENTS_SEQEND[0]) return false;
+    NRF_PWM0->EVENTS_SEQEND[0] = 0;
+    NRF_PWM0->EVENTS_STOPPED = 0;
+    NRF_PWM0->TASKS_STOP = 1;
+    while (!NRF_PWM0->EVENTS_STOPPED) {}
+    ws_running = false;
+  }
+  uint16_t *p = ws_seq;
+  for (int px = 0; px < 2; px++) {
+    uint8_t const grb[3] = {rgb[px * 3 + 1], rgb[px * 3 + 0], rgb[px * 3 + 2]};
+    for (int c = 0; c < 3; c++)
+      for (int bit = 7; bit >= 0; bit--) *p++ = (grb[c] >> bit) & 1 ? WS_T1H : WS_T0H;
+  }
+  for (int i = 0; i < WS_TAIL; i++) *p++ = WS_LOW;
+
+  NRF_PWM0->SEQ[0].PTR = (uint32_t)ws_seq;
+  NRF_PWM0->SEQ[0].CNT = WS_BITS + WS_TAIL;
+  NRF_PWM0->EVENTS_SEQEND[0] = 0;
+  NRF_PWM0->TASKS_SEQSTART[0] = 1;
+  ws_running = true;
+  return true;
 }
 
 void hw_apply_pins(uint8_t d_state, uint8_t d_dir) {

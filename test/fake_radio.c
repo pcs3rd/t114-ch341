@@ -15,7 +15,7 @@ static uint8_t rev(uint8_t x) {
 
 uint8_t radio_miso_pattern(uint32_t pos) { return (uint8_t)(pos * 37u + 0x5Au); }
 
-void hw_init(void) { memset(&radio, 0, sizeof(radio)); radio.cs = 1; radio.reset = 1; }
+void hw_init(void) { uint32_t t = radio.now_ms; memset(&radio, 0, sizeof(radio)); radio.now_ms = t; radio.cs = 1; radio.reset = 1; }
 
 void hw_apply_pins(uint8_t st, uint8_t dir) {
   int cs = (dir & 1) ? (st & 1) : 1;
@@ -49,12 +49,16 @@ void hw_spi_xfer(uint8_t const *tx, uint8_t *rx, uint8_t n) {
   if (radio.cs) radio.bytes_outside_cs += n;
   for (uint8_t i = 0; i < n; i++) {
     if (radio.win_len < sizeof(radio.win)) radio.win[radio.win_len] = rev(tx[i]);
-    rx[i] = rev(radio_miso_pattern(radio.win_len));
+    uint8_t miso = radio_miso_pattern(radio.win_len);
+    if (radio.win_len >= 2 && radio.win_len <= 3 && radio.win[0] == 0x12)  // GetIrqStatus
+      miso = radio.win_len == 2 ? (uint8_t)(radio.irq >> 8) : (uint8_t)radio.irq;
+    rx[i] = rev(miso);
     radio.win_len++;
   }
 }
 
 void hw_delay_us(uint32_t us) { (void)us; }
-uint32_t hw_millis(void) { return 0; }
+uint32_t hw_millis(void) { return radio.now_ms; }
+bool hw_pixels_write(uint8_t const rgb[6]) { memcpy(radio.pixels, rgb, 6); radio.pixel_writes++; return true; }
 void hw_led(bool on) { (void)on; }
 void hw_enter_bootloader(void) {}

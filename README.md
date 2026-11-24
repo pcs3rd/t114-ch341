@@ -13,12 +13,46 @@ Pi ──USB── nRF52840 (fake CH341A) ──SPI/GPIO── SX1262
 ## Flash
 
 1. Double-tap the T114's reset button. A USB drive appears.
-2. Copy `t114_ch341.uf2` onto it. The board reboots, and the green LED goes solid once the host
-   has configured it. The LED blinks off when there's SPI traffic.
+2. Copy `t114_ch341.uf2` onto it. The board reboots, and the status LEDs (below) come on.
 
 To go back to Meshtastic, double-tap reset and copy the stock T114 `.uf2` onto the drive. The
 bootloader and SoftDevice are never touched. To reflash a board that's already deployed, use
-`tools/t114-bootloader.py`, which sends a vendor request that reboots it into the bootloader.
+`tools/t114ctl.py bootloader`, which sends a vendor request that reboots it into the bootloader.
+
+## Status LEDs
+
+The two NeoPixels show the state of the link and of the radio:
+
+| Pixel | Colour | Meaning |
+|---|---|---|
+| Link (pixel 0) | red | No USB host (powered but not enumerated) |
+| | amber | Enumerated, but meshtasticd hasn't talked to it for 2 s |
+| | green | meshtasticd is driving the radio |
+| Radio (pixel 1) | off | Standby / sleep, or no host |
+| | blue | Listening (RX or channel scan) |
+| | red | Transmitting |
+| | green flash | Packet received |
+| | orange flash | Packet received with a CRC error |
+
+The radio pixel comes from watching the SPI traffic that passes through: the SX1262 opcode at
+the start of each chip-select window (SetTx, SetRx, SetCad, SetStandby, SetSleep), and the IRQ
+flags in GetIrqStatus replies. So it shows what meshtasticd actually told the radio to do. It
+adds nothing to the protocol. The board's green LED still lights while the host has the board
+configured, and blinks off on SPI traffic.
+
+Brightness defaults to 24/255. Change it while running, with no reflash:
+```
+tools/t114ctl.py brightness 8     # dimmer
+tools/t114ctl.py brightness 0     # off
+```
+The setting lasts until power-off. To change the default, rebuild with
+`./build.sh EXTRA_CFLAGS=-DSTATUS_DEFAULT_BRIGHTNESS=8`.
+
+The NeoPixels run off the T114's switched Vext rail, which the firmware turns on. That rail
+also powers the TFT, which the firmware keeps off, and the GPS socket. **With a GPS module
+fitted, it will draw power (tens of mA).** If you'd rather not have that, build with
+`EXTRA_CFLAGS=-DT114_NEOPIXEL_VEXT=0`. If your board doesn't take its NeoPixel power from Vext, that setting
+also turns the LEDs off.
 
 ## Configure meshtasticd
 
@@ -80,19 +114,23 @@ cd test && make
 This builds meshtasticd's real libpinedio-usb (pinned) against a fake libusb. The fake routes
 every bulk transfer, packet by packet, into the firmware's class driver, with a fake SX1262 on
 the other side. It checks CS windows, MOSI/MISO byte order, every transfer size that crosses
-31/32-byte packet boundaries, RESET, BUSY/DIO1 reads, the interrupt poll thread, and 2000
+31/32-byte packet boundaries, RESET, BUSY/DIO1 reads, the interrupt poll thread, the status-LED
+radio sniffer (SetTx/SetRx/IRQ flags, including commands split across USB packets), and 2000
 random transfers. It runs under ASan/UBSan.
 
 ## Status / caveats
 
-- Not yet run on real hardware. The protocol layer is tested end to end against the real host
-  library, but USB enumeration on the nRF52840 and the SPIM wiring are only verified by
-  compiling. The T114 pin map comes from Meshtastic's `heltec_mesh_node_t114/variant.h`.
+- Not yet run on real hardware. The protocol layer and LED logic are tested end to end against
+  the real host library, but USB enumeration on the nRF52840, the SPIM wiring and the WS2812
+  PWM timing are only verified by compiling. The T114 pin map comes from Meshtastic's `heltec_mesh_node_t114/variant.h`.
 - If something's off on first plug-in, check `dmesg` for enumeration of `1a86:5512`, then run
   `meshtasticd` in the foreground. Its "CH341 Serial …" line confirms the USB layer works.
 - On newer kernels, the in-tree `spi-ch341` driver may bind to the device first. libpinedio
   detaches it automatically, as it does for a real CH341.
 - The T114's screen, GPS and button are left unused.
+- Which physical NeoPixel is "pixel 0" hasn't been checked on hardware; if they're swapped
+  relative to the table, that's cosmetic.
+- `t114ctl.py` needs permission to the USB device (root, or a udev rule for `1a86:5512`).
 
 ## License
 

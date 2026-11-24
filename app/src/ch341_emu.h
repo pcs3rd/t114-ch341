@@ -30,6 +30,9 @@
 // bmRequestType 0x40, bRequest 0xF7, wValue 0xB007.
 #define CH341_EMU_REQ_BOOTLOADER  0xF7
 #define CH341_EMU_BOOTLOADER_MAGIC 0xB007
+// Vendor control request for the status LED brightness.
+// Set: bmRequestType 0x40, bRequest 0xF8, wValue 0-255.  Get: bmRequestType 0xC0, wLength 1.
+#define CH341_EMU_REQ_BRIGHTNESS 0xF8
 
 void ch341_emu_init(void);
 void ch341_emu_task(void);

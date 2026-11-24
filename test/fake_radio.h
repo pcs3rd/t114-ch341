@@ -15,6 +15,10 @@ struct fake_radio {
   int n_windows;
   int reset_pulses;
   uint32_t bytes_outside_cs;
+  uint16_t irq;            // what GetIrqStatus (0x12) returns
+  uint32_t now_ms;         // fake clock for hw_millis()
+  uint8_t pixels[6];       // last frame written to the WS2812s
+  int pixel_writes;
 };
 extern struct fake_radio radio;
 uint8_t radio_miso_pattern(uint32_t pos);

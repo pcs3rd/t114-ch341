@@ -5,7 +5,7 @@ LIBCH341 ?= .libch341
 CFLAGS = -std=gnu11 -O1 -g -Wall -Wno-pointer-sign -Wno-unused-parameter -pthread \
          -fsanitize=address,undefined -Imock -I../app/src -I$(LIBCH341)
 
-SRC = test.c fake_usb.c fake_radio.c ../app/src/ch341_emu.c ../app/src/usb_descriptors.c $(LIBCH341)/libpinedio-usb.c
+SRC = test.c fake_usb.c fake_radio.c ../app/src/ch341_emu.c ../app/src/status.c ../app/src/usb_descriptors.c $(LIBCH341)/libpinedio-usb.c
 
 run: ch341_test
 	./ch341_test
