@@ -37,8 +37,7 @@ The two NeoPixels show the state of the link and of the radio:
 The radio pixel comes from watching the SPI traffic that passes through: the SX1262 opcode at
 the start of each chip-select window (SetTx, SetRx, SetCad, SetStandby, SetSleep), and the IRQ
 flags in GetIrqStatus replies. So it shows what meshtasticd actually told the radio to do. It
-adds nothing to the protocol. The board's green LED still lights while the host has the board
-configured, and blinks off on SPI traffic.
+adds nothing to the protocol. The board's green LED stays off.
 
 Brightness defaults to 24/255. Change it while running, with no reflash:
 ```

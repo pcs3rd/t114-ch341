@@ -181,7 +181,6 @@ uint32_t hw_millis(void) {
   return ms;
 }
 
-void hw_led(bool on) { board_led_write(on); }
 
 void hw_enter_bootloader(void) {
   NRF_POWER->GPREGRET = 0x57; // Adafruit nRF52 bootloader: DFU_MAGIC_UF2_RESET

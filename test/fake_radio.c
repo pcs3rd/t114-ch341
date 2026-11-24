@@ -60,5 +60,4 @@ void hw_spi_xfer(uint8_t const *tx, uint8_t *rx, uint8_t n) {
 void hw_delay_us(uint32_t us) { (void)us; }
 uint32_t hw_millis(void) { return radio.now_ms; }
 bool hw_pixels_write(uint8_t const rgb[6]) { memcpy(radio.pixels, rgb, 6); radio.pixel_writes++; return true; }
-void hw_led(bool on) { (void)on; }
 void hw_enter_bootloader(void) {}

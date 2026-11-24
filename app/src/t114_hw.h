@@ -15,7 +15,6 @@ uint8_t hw_read_pins(uint8_t d_state, uint8_t d_dir);
 void hw_spi_xfer(uint8_t const *tx, uint8_t *rx, uint8_t n);
 void hw_delay_us(uint32_t us);
 uint32_t hw_millis(void);
-void hw_led(bool on);
 // Show {r,g,b, r,g,b} on the two WS2812s. Non-blocking; returns false if the previous frame is
 // still being clocked out (try again later).
 bool hw_pixels_write(uint8_t const rgb[6]);

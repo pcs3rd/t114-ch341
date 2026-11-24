@@ -60,8 +60,6 @@ static bool out_armed;
 static uint8_t d_state;
 static uint8_t d_dir;
 
-static uint32_t led_next_ms;
-static bool activity;
 
 //--------------------------------------------------------------------+
 // Command execution: one OUT packet in, at most one response packet out
@@ -77,7 +75,6 @@ static void execute(pkt_t const *in, pkt_t *out) {
         hw_spi_xfer(&in->data[1], out->data, n);
         status_spi(&in->data[1], out->data, n, hw_millis());
         out->len = n;
-        activity = true;
       }
       break;
     }
@@ -265,16 +262,6 @@ void ch341_emu_task(void) {
   arm_out();
   kick_in();
 
-  uint32_t now = hw_millis();
-  status_task(now, tud_mounted());
-
-  // Green LED: on while configured, blinks off briefly on SPI traffic
-  if (activity) {
-    activity = false;
-    hw_led(false);
-    led_next_ms = now + 15;
-  } else if ((int32_t)(now - led_next_ms) >= 0) {
-    hw_led(tud_mounted());
-    led_next_ms = now + 100;
-  }
+  // The NeoPixels are the only indicator; the green LED stays off (board_init leaves it off).
+  status_task(hw_millis(), tud_mounted());
 }
