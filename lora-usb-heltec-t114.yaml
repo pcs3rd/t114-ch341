@@ -1,0 +1,22 @@
+# meshtasticd radio config for a Heltec T114 running the t114_ch341 bridge firmware.
+# Drop in /etc/meshtasticd/config.d/ and make sure nothing else in config.yaml / config.d
+# sets a Lora: section (in particular Module: auto - see README).
+Lora:
+  Module: sx1262
+  spidev: ch341
+  USB_VID: 0x1A86
+  USB_PID: 0x5512
+  # Several bridges on one host: pin each meshtasticd instance to one by its 8-char USB serial
+  # (lsusb -v -d 1a86:5512 | grep iSerial)
+  # USB_Serialnum: 1A2B3C4D
+
+  # CH341 pin indexes, not Pi GPIOs. The firmware maps them onto the T114's SX1262.
+  CS: 0
+  Reset: 2
+  Busy: 4
+  IRQ: 6
+
+  # T114 radio specifics (from Meshtastic's heltec_mesh_node_t114 variant)
+  DIO2_AS_RF_SWITCH: true
+  DIO3_TCXO_VOLTAGE: 1.8
+  SX126X_MAX_POWER: 22

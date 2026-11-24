@@ -1,0 +1,6 @@
+.tinyusb/
+out/
+result
+result-*
+test/.libch341/
+test/ch341_test
